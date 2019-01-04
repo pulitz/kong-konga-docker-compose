@@ -1,0 +1,101 @@
+version: '2.1'
+services:
+  kong-db:
+    image: postgres:9.6
+    environment:
+      POSTGRES_DB: ${KONG_PG_DATABASE:-kong}
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kong}
+      POSTGRES_USER: ${KONG_PG_USER:-kong}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${KONG_PG_USER:-kong}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: on-failure
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./kong-pgdata:/var/lib/postgresql/data
+  kong-migrations:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    command: kong migrations up
+    depends_on:
+      kong-db:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong}
+      KONG_PG_HOST: kong-db
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-kong}
+      KONG_PG_USER: ${KONG_PG_USER:-kong}
+    links:
+      - kong-db
+  kong:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    depends_on:
+      kong-db:
+        condition: service_healthy
+    environment:
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 'kong:8001'
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong}
+      KONG_PG_HOST: kong-db
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-kong}
+      KONG_PG_USER: ${KONG_PG_USER:-kong}
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    links:
+      - kong-db
+    ports:
+      - "8000:8000/tcp"
+      - "8001:8001/tcp"
+      - "8443:8443/tcp"
+      - "8444:8444/tcp"
+    restart: on-failure
+
+  konga-db:
+    image: postgres:9.6
+    environment:
+      POSTGRES_DB: ${KONGA_PG_DATABASE:-konga}
+      POSTGRES_PASSWORD: ${KONGA_PG_PASSWORD:-konga}
+      POSTGRES_USER: ${KONGA_PG_USER:-konga}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${KONGA_PG_USER:-konga}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: on-failure
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./konga-pgdata:/var/lib/postgresql/data
+  konga-prepare:
+    image: "${KONGA_DOCKER_TAG:-pantsel/konga:latest}"
+    command: "-c prepare -a postgres -u postgresql://${KONGA_PG_USER:-konga}:${KONGA_PG_PASSWORD:-konga}@konga-db:5432/konga"
+    links:
+      - konga-db
+    restart: on-failure
+    depends_on:
+      konga-db:
+        condition: service_healthy
+  konga:
+    image: "${KONGA_DOCKER_TAG:-pantsel/konga:latest}"
+    restart: always
+    depends_on:
+      konga-db:
+        condition: service_healthy
+    links:
+      - konga-db
+      - kong
+    ports:
+      - "1337:1337/tcp"
+    environment:
+      TOKEN_SECRET: ${KONGA_SECRET:-somerandomsecret}
+      DB_ADAPTER: postgres
+      DB_HOST: konga-db
+      DB_USER: ${KONGA_PG_USER:-konga}
+      DB_PASSWORD: ${KONGA_PG_PASSWORD:-konga}
+      DB_DATABASE: ${KONGA_PG_DATABASE:-konga}
+      NODE_ENV: ${KONGA_NODE_ENV:-development}
