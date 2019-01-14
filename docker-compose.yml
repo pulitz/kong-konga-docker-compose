@@ -18,7 +18,7 @@ services:
       - ./kong-pgdata:/var/lib/postgresql/data
   kong-migrations:
     image: "${KONG_DOCKER_TAG:-kong:latest}"
-    command: kong migrations up
+    command: kong migrations bootstrap
     depends_on:
       kong-db:
         condition: service_healthy
@@ -72,7 +72,7 @@ services:
     volumes:
       - ./konga-pgdata:/var/lib/postgresql/data
   konga-prepare:
-    image: "${KONGA_DOCKER_TAG:-pantsel/konga:latest}"
+    image: "${KONGA_DOCKER_TAG:-pantsel/konga:next}"
     command: "-c prepare -a postgres -u postgresql://${KONGA_PG_USER:-konga}:${KONGA_PG_PASSWORD:-konga}@konga-db:5432/konga"
     links:
       - konga-db
@@ -81,7 +81,7 @@ services:
       konga-db:
         condition: service_healthy
   konga:
-    image: "${KONGA_DOCKER_TAG:-pantsel/konga:latest}"
+    image: "${KONGA_DOCKER_TAG:-pantsel/konga:next}"
     restart: always
     depends_on:
       konga-db:
